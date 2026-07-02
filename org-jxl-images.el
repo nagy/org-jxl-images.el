@@ -65,8 +65,29 @@
   :type 'string
   :group 'org-jxl)
 
+(defun org-jxl--create-image (png-data)
+  "Create an image from PNG-DATA, respecting Org's width settings."
+  (let ((img (create-image png-data 'png t :ascent 'center))
+        (width nil))
+    (when (and (boundp 'org-image-actual-width)
+               org-image-actual-width
+               (not (eq org-image-actual-width t)))
+      (setq width (if (functionp org-image-actual-width)
+                      (funcall org-image-actual-width
+                               (car (image-size img t)))
+                    org-image-actual-width))
+      (when (floatp width)
+        (setq width (* width (car (image-size img t)))))
+      (when (and width (> width 0))
+        (setq img (append img (list :width (truncate width))))))
+    img))
+
 (defvar-local org-jxl--overlays nil
   "List of image overlays created by `org-jxl-inline-mode'.")
+
+(defun org-jxl--change-major-mode ()
+  "Disable JXL inline mode when leaving the current major mode."
+  (org-jxl-inline-mode -1))
 
 
 ;;; Overlay management
@@ -105,7 +126,7 @@
                                      (list (current-buffer) nil) nil
                                      jxl-file "-" "--output_format" "png")
                         (buffer-string))))
-                   (img (create-image png-data 'png t :ascent 'center)))
+                   (img (org-jxl--create-image png-data)))
               (with-current-buffer source-buffer
                 (let ((ov (make-overlay start end)))
                   (overlay-put ov 'display img)
@@ -184,9 +205,11 @@ To insert a JXL block, encode your image to base64 externally
   (if org-jxl-inline-mode
       (progn
         (org-jxl-refresh-images)
+        (add-hook 'change-major-mode-hook #'org-jxl--change-major-mode nil t)
         (advice-add 'org-toggle-inline-images :after #'org-jxl-refresh-images))
     (org-jxl--delete-overlays)
-    (advice-remove 'org-toggle-inline-images #'org-jxl-refresh-images)))
+    (advice-remove 'org-toggle-inline-images #'org-jxl-refresh-images)
+    (remove-hook 'change-major-mode-hook #'org-jxl--change-major-mode t)))
 
 (provide 'org-jxl-images)
 ;;; org-jxl-images.el ends here
