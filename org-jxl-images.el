@@ -180,6 +180,24 @@ The current top entry of the kill ring is wrapped in
             (org-jxl-refresh-images)))
       (user-error "Kill ring does not contain valid base64 data"))))
 
+;;;###autoload
+(defun org-jxl-open-external ()
+  "Open the JXL image at point in an external viewer.
+Extracts the decoded PNG data from the overlay and opens it
+with the system's default image viewer."
+  (interactive)
+  (if-let* ((ov (car (overlays-at (point))))
+            (disp (overlay-get ov 'display))
+            ((eq (car disp) 'image))
+            (data (plist-get (cdr disp) :data)))
+      (let ((tmp (make-temp-file "org-jxl-view-" nil ".png")))
+        (with-temp-buffer
+          (set-buffer-multibyte nil)
+          (insert data)
+          (write-region (point-min) (point-max) tmp nil 'silent))
+        (start-process "org-jxl-view" nil "xdg-open" tmp))
+    (user-error "No JXL image at point")))
+
 
 ;;; Minor mode
 
