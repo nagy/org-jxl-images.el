@@ -69,8 +69,7 @@
   "Create an image from PNG-DATA, respecting Org's width settings."
   (let ((img (create-image png-data 'png t :ascent 'center))
         (width nil))
-    (when (and (boundp 'org-image-actual-width)
-               org-image-actual-width
+    (when (and org-image-actual-width
                (not (eq org-image-actual-width t)))
       (setq width (if (functionp org-image-actual-width)
                       (funcall org-image-actual-width
@@ -147,56 +146,13 @@
     (org-jxl--delete-overlays)
     (org-element-map (org-element-parse-buffer) 'special-block
       (lambda (block)
-        (when (string-equal (org-element-property :type block) "JXL")
+        (when (string-equal (downcase (org-element-property :type block)) "jxl")
           (org-jxl--decode-and-render
            (org-element-property :begin block)
            (org-element-property :end block)
            (buffer-substring-no-properties
             (org-element-property :contents-begin block)
             (org-element-property :contents-end block))))))))
-
-
-;;; Insertion commands
-
-(defun org-jxl--wrap-base64 (b64-string)
-  "Wrap B64-STRING in #+BEGIN_JXL / #+END_JXL and insert at point."
-  (insert "#+BEGIN_JXL\n")
-  (let ((start (point)))
-    (insert b64-string)
-    (fill-region start (point)))
-  (insert "\n#+END_JXL\n"))
-
-;;;###autoload
-(defun org-jxl-insert-base64 ()
-  "Insert base64-encoded JXL data from the kill ring as a JXL block.
-The current top entry of the kill ring is wrapped in
-#+BEGIN_JXL ... #+END_JXL."
-  (interactive)
-  (let ((b64 (car kill-ring)))
-    (if (and b64 (> (length b64) 10))
-        (progn
-          (org-jxl--wrap-base64 b64)
-          (when (and (boundp 'org-jxl-inline-mode) org-jxl-inline-mode)
-            (org-jxl-refresh-images)))
-      (user-error "Kill ring does not contain valid base64 data"))))
-
-;;;###autoload
-(defun org-jxl-open-external ()
-  "Open the JXL image at point in an external viewer.
-Extracts the decoded PNG data from the overlay and opens it
-with the system's default image viewer."
-  (interactive)
-  (if-let* ((ov (car (overlays-at (point))))
-            (disp (overlay-get ov 'display))
-            ((eq (car disp) 'image))
-            (data (plist-get (cdr disp) :data)))
-      (let ((tmp (make-temp-file "org-jxl-view-" nil ".png")))
-        (with-temp-buffer
-          (set-buffer-multibyte nil)
-          (insert data)
-          (write-region (point-min) (point-max) tmp nil 'silent))
-        (start-process "org-jxl-view" nil "xdg-open" tmp))
-    (user-error "No JXL image at point")))
 
 
 ;;; Minor mode
@@ -228,6 +184,45 @@ To insert a JXL block, encode your image to base64 externally
     (org-jxl--delete-overlays)
     (advice-remove 'org-toggle-inline-images #'org-jxl-refresh-images)
     (remove-hook 'change-major-mode-hook #'org-jxl--change-major-mode t)))
+
+
+;;; Insertion commands
+
+;;;###autoload
+(defun org-jxl-insert-base64 ()
+  "Insert base64-encoded JXL data from the kill ring as a JXL block.
+The current top entry of the kill ring is wrapped in
+#+BEGIN_JXL ... #+END_JXL."
+  (interactive)
+  (let ((b64 (car kill-ring)))
+    (if (and b64 (> (length b64) 10))
+        (progn
+          (insert "#+BEGIN_JXL\n")
+          (let ((start (point)))
+            (insert b64)
+            (fill-region start (point)))
+          (insert "\n#+END_JXL\n")
+          (when org-jxl-inline-mode
+            (org-jxl-refresh-images)))
+      (user-error "Kill ring does not contain valid base64 data"))))
+
+;;;###autoload
+(defun org-jxl-open-external ()
+  "Open the JXL image at point in an external viewer.
+Extracts the decoded PNG data from the overlay and opens it
+with the system's default image viewer."
+  (interactive)
+  (if-let* ((ov (car (overlays-at (point))))
+            (disp (overlay-get ov 'display))
+            ((eq (car disp) 'image))
+            (data (plist-get (cdr disp) :data)))
+      (let ((tmp (make-temp-file "org-jxl-view-" nil ".png")))
+        (with-temp-buffer
+          (set-buffer-multibyte nil)
+          (insert data)
+          (write-region (point-min) (point-max) tmp nil 'silent))
+        (start-process "org-jxl-view" nil "xdg-open" tmp))
+    (user-error "No JXL image at point")))
 
 (provide 'org-jxl-images)
 ;;; org-jxl-images.el ends here
