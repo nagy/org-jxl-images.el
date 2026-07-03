@@ -1,0 +1,31 @@
+#+TITLE: org-jxl-images
+
+Inline JPEG XL images in Org mode.
+
+Renders base64-encoded JXL data inside =#+BEGIN_JXL= … =#+END_JXL= blocks
+as inline images using ~djxl~ from [[https://github.com/libjxl/libjxl][libjxl]].
+No loose files, clean git history, portable notes.
+
+* Usage
+
+#+begin_src elisp
+  ;; Activate per buffer
+  M-x org-jxl-inline-mode
+
+  ;; Auto-enable for all Org files
+  (add-hook 'org-mode-hook #'org-jxl-inline-mode)
+#+end_src
+
+Paste base64 JXL data from the kill ring:
+
+: M-x org-jxl-insert-base64
+
+Encode an image on the command line:
+
+#+begin_src sh
+  cjxl image.png - | base64 -w0 | wl-copy
+#+end_src
+
+* License
+
+[[./LICENSE][AGPL3+]]
