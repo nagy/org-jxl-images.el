@@ -122,8 +122,8 @@
                       (let ((coding-system-for-write 'binary)
                             (coding-system-for-read 'binary))
                         (call-process org-jxl-djxl-program nil
-                                     (list (current-buffer) nil) nil
-                                     jxl-file "-" "--output_format" "png")
+                                      (list (current-buffer) nil) nil
+                                      jxl-file "-" "--output_format" "png")
                         (buffer-string))))
                    (img (org-jxl--create-image png-data)))
               (with-current-buffer source-buffer
@@ -132,7 +132,7 @@
                   (overlay-put ov 'evaporate t)
                   (push ov org-jxl--overlays))))
           (error (message "Failed to render JXL block image: %s"
-                         (error-message-string err))
+                          (error-message-string err))
                  nil))
       (ignore-errors (delete-file jxl-file)))))
 
