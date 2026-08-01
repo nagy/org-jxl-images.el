@@ -84,6 +84,15 @@
 (defvar-local org-jxl--overlays nil
   "List of image overlays created by `org-jxl-inline-mode'.")
 
+(defvar-local org-jxl--decode-cache nil
+  "Alist mapping JXL block base64 contents to decoded PNG data.
+Reused across refreshes so unchanged blocks are not decoded again with
+`org-jxl-djxl-program'.  Capped at `org-jxl--decode-cache-max' entries,
+oldest evicted first.")
+
+(defvar org-jxl--decode-cache-max 64
+  "Maximum number of entries kept in `org-jxl--decode-cache'.")
+
 (defun org-jxl--change-major-mode ()
   "Disable JXL inline mode when leaving the current major mode."
   (org-jxl-inline-mode -1))
@@ -98,43 +107,65 @@
   (mapc #'delete-overlay org-jxl--overlays)
   (setq org-jxl--overlays nil))
 
-(defun org-jxl--decode-and-render (start end base64-str)
-  "Decode BASE64-STR with djxl and place an image overlay from START to END."
-  (let ((source-buffer (current-buffer))
-        (jxl-file (make-temp-file "org-jxl-" nil ".jxl")))
-    ;; Decode base64, write binary JXL to temp file
-    (with-temp-buffer
-      (set-buffer-multibyte nil)
-      (let ((coding-system-for-write 'binary)
-            (coding-system-for-read 'binary))
-        (insert base64-str)
-        (goto-char (point-min))
-        (while (re-search-forward "[ \t\n\r]+" nil t)
-          (replace-match ""))
-        (base64-decode-region (point-min) (point-max))
-        (write-region (point-min) (point-max) jxl-file nil 'silent)))
-    ;; Feed to djxl, capture PNG on stdout
+(defun org-jxl--run-djxl (base64-str)
+  "Decode BASE64-STR with djxl and return PNG data, or nil on error."
+  (let ((jxl-file (make-temp-file "org-jxl-" nil ".jxl")))
     (unwind-protect
         (condition-case err
-            (let* ((png-data
-                    (with-temp-buffer
-                      (set-buffer-multibyte nil)
-                      (let ((coding-system-for-write 'binary)
-                            (coding-system-for-read 'binary))
-                        (call-process org-jxl-djxl-program nil
-                                      (list (current-buffer) nil) nil
-                                      jxl-file "-" "--output_format" "png")
-                        (buffer-string))))
-                   (img (org-jxl--create-image png-data)))
-              (with-current-buffer source-buffer
-                (let ((ov (make-overlay start end)))
-                  (overlay-put ov 'display img)
-                  (overlay-put ov 'evaporate t)
-                  (push ov org-jxl--overlays))))
+            ;; Decode base64 and write binary JXL to a temp file.
+            (with-temp-buffer
+              (set-buffer-multibyte nil)
+              (let ((coding-system-for-write 'binary)
+                    (coding-system-for-read 'binary))
+                (insert base64-str)
+                (goto-char (point-min))
+                (while (re-search-forward "[ \t\n\r]+" nil t)
+                  (replace-match ""))
+                (base64-decode-region (point-min) (point-max))
+                (write-region (point-min) (point-max) jxl-file nil 'silent))
+              ;; Feed to djxl, capture PNG on stdout in a fresh buffer so
+              ;; `call-process' appends to empty contents.
+              (let ((png-data
+                     (with-temp-buffer
+                       (set-buffer-multibyte nil)
+                       (let ((coding-system-for-write 'binary)
+                             (coding-system-for-read 'binary))
+                         (call-process org-jxl-djxl-program nil
+                                       (list (current-buffer) nil) nil
+                                       jxl-file "-" "--output_format" "png")
+                         (buffer-string)))))
+                png-data))
           (error (message "Failed to render JXL block image: %s"
                           (error-message-string err))
                  nil))
       (ignore-errors (delete-file jxl-file)))))
+
+
+
+(defun org-jxl--decode-to-png (base64-str)
+  "Return PNG data for BASE64-STR, decoding with djxl when not cached.
+Entries are cached in `org-jxl--decode-cache' keyed by BASE64-STR;
+oldest entries are evicted past `org-jxl--decode-cache-max'."
+  (or (cdr (assoc base64-str org-jxl--decode-cache))
+      (let ((png-data (org-jxl--run-djxl base64-str)))
+        (when png-data
+          (setq org-jxl--decode-cache
+                (cons (cons base64-str png-data) org-jxl--decode-cache))
+          (when (> (length org-jxl--decode-cache) org-jxl--decode-cache-max)
+            (setq org-jxl--decode-cache
+                  (butlast org-jxl--decode-cache
+                           (- (length org-jxl--decode-cache)
+                              org-jxl--decode-cache-max)))))
+        png-data)))
+
+(defun org-jxl--decode-and-render (start end base64-str)
+  "Decode BASE64-STR with djxl and place an image overlay from START to END."
+  (let ((png-data (org-jxl--decode-to-png base64-str)))
+    (when png-data
+      (let ((ov (make-overlay start end)))
+        (overlay-put ov 'display (org-jxl--create-image png-data))
+        (overlay-put ov 'evaporate t)
+        (push ov org-jxl--overlays)))))
 
 
 ;;; Block scanning
@@ -182,6 +213,7 @@ To insert a JXL block, encode your image to base64 externally
         (add-hook 'change-major-mode-hook #'org-jxl--change-major-mode nil t)
         (advice-add 'org-toggle-inline-images :after #'org-jxl-refresh-images))
     (org-jxl--delete-overlays)
+    (setq org-jxl--decode-cache nil)
     (advice-remove 'org-toggle-inline-images #'org-jxl-refresh-images)
     (remove-hook 'change-major-mode-hook #'org-jxl--change-major-mode t)))
 

@@ -146,6 +146,32 @@
       (should (= 1 (length org-jxl--overlays))))
     (kill-buffer buf)))
 
+(ert-deftest org-jxl-decode-cache-reuses-png ()
+  "Refreshing unchanged blocks should not grow the decode cache."
+  (skip-unless (executable-find org-jxl-djxl-program))
+  (let ((buf (org-jxl-test--with-org-buffer
+              (format "#+BEGIN_JXL\n%s\n#+END_JXL\n"
+                      org-jxl-test--valid-jxl-b64))))
+    (with-current-buffer buf
+      (org-jxl-refresh-images)
+      (should (= 1 (length org-jxl--decode-cache)))
+      (org-jxl-refresh-images)
+      (should (= 1 (length org-jxl--decode-cache))))
+    (kill-buffer buf)))
+
+(ert-deftest org-jxl-mode-disable-clears-cache ()
+  "Disabling the mode should drop the decode cache."
+  (skip-unless (executable-find org-jxl-djxl-program))
+  (let ((buf (org-jxl-test--with-org-buffer
+              (format "#+BEGIN_JXL\n%s\n#+END_JXL\n"
+                      org-jxl-test--valid-jxl-b64))))
+    (with-current-buffer buf
+      (org-jxl-inline-mode 1)
+      (should org-jxl--decode-cache)
+      (org-jxl-inline-mode -1)
+      (should-not org-jxl--decode-cache))
+    (kill-buffer buf)))
+
 
 ;;; Insertion helpers
 
