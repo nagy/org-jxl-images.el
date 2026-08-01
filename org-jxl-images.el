@@ -65,22 +65,6 @@
   :type 'string
   :group 'org-jxl)
 
-(defun org-jxl--create-image (png-data)
-  "Create an image from PNG-DATA, respecting Org's width settings."
-  (let ((img (create-image png-data 'png t :ascent 'center))
-        (width nil))
-    (when (and org-image-actual-width
-               (not (eq org-image-actual-width t)))
-      (setq width (if (functionp org-image-actual-width)
-                      (funcall org-image-actual-width
-                               (car (image-size img t)))
-                    org-image-actual-width))
-      (when (floatp width)
-        (setq width (* width (car (image-size img t)))))
-      (when (and width (> width 0))
-        (setq img (append img (list :width (truncate width))))))
-    img))
-
 (defvar-local org-jxl--overlays nil
   "List of image overlays created by `org-jxl-inline-mode'.")
 
@@ -163,7 +147,7 @@ oldest entries are evicted past `org-jxl--decode-cache-max'."
   (let ((png-data (org-jxl--decode-to-png base64-str)))
     (when png-data
       (let ((ov (make-overlay start end)))
-        (overlay-put ov 'display (org-jxl--create-image png-data))
+        (overlay-put ov 'display (create-image png-data 'png t :ascent 'center))
         (overlay-put ov 'evaporate t)
         (push ov org-jxl--overlays)))))
 
