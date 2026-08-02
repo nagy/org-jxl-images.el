@@ -187,6 +187,17 @@
       (should-error (org-jxl-insert-base64)))
     (kill-buffer buf)))
 
+(ert-deftest org-jxl-insert-base64-rejects-invalid-chars ()
+  "`org-jxl-insert-base64' rejects strings that are not base64."
+  (let ((buf (org-jxl-test--with-org-buffer "")))
+    (with-current-buffer buf
+      (dolist (bad (list "dGVzdC1kYXRh-"          ; trailing dash
+                         "not base64!!"           ; punctuation
+                         "aGVsbG8 gd29ybGQ="))   ; embedded space
+        (kill-new bad)
+        (should-error (org-jxl-insert-base64))))
+    (kill-buffer buf)))
+
 
 ;;; Mode only active in org-mode
 

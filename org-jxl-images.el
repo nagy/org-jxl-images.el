@@ -210,13 +210,13 @@ To insert a JXL block, encode your image to base64 externally
 The current top entry of the kill ring is wrapped in
 #+BEGIN_JXL ... #+END_JXL."
   (interactive)
-  (let ((b64 (car kill-ring)))
-    (if (and b64 (> (length b64) 10))
+  (let ((b64 (current-kill 0)))
+    (if (and (stringp b64)
+             (> (length b64) 10)
+             (not (string-match-p "[^A-Za-z0-9+/=]" b64)))
         (progn
           (insert "#+BEGIN_JXL\n")
-          (let ((start (point)))
-            (insert b64)
-            (fill-region start (point)))
+          (insert b64)
           (insert "\n#+END_JXL\n")
           (when org-jxl-inline-mode
             (org-jxl-refresh-images)))
