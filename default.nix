@@ -26,6 +26,11 @@ melpaBuild (finalAttrs: {
   checkPhase = ''
     runHook preCheck
 
+    # The tests decode real JXL data, so djxl must be reachable via PATH
+    # (the package's defcustom points at the absolute libjxl path after
+    # postPatch, but the tests use `executable-find`).
+    export PATH=${lib.getBin libjxl}/bin:$PATH
+
     emacs --batch -L . \
       -l org-jxl-images-tests.el \
       -f ert-run-tests-batch-and-exit

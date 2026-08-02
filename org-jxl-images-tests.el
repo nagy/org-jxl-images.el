@@ -47,7 +47,6 @@
 
 (ert-deftest org-jxl-detect-single-block ()
   "A single JXL block is detected and an overlay is created."
-  (skip-unless (executable-find org-jxl-djxl-program))
   (let ((buf (org-jxl-test--with-org-buffer
               (format "#+BEGIN_JXL\n%s\n#+END_JXL\n"
                       org-jxl-test--valid-jxl-b64))))
@@ -59,7 +58,6 @@
 
 (ert-deftest org-jxl-detect-multiple-blocks ()
   "Multiple JXL blocks should each get an overlay."
-  (skip-unless (executable-find org-jxl-djxl-program))
   (let ((block (format "#+BEGIN_JXL\n%s\n#+END_JXL\n"
                        org-jxl-test--valid-jxl-b64)))
     (let ((buf (org-jxl-test--with-org-buffer
@@ -71,7 +69,6 @@
 
 (ert-deftest org-jxl-block-with-leading-whitespace ()
   "Blocks with leading whitespace before the #+BEGIN_JXL marker are detected."
-  (skip-unless (executable-find org-jxl-djxl-program))
   (let ((buf (org-jxl-test--with-org-buffer
               (format "  #+BEGIN_JXL\n%s\n  #+END_JXL\n"
                       org-jxl-test--valid-jxl-b64))))
@@ -86,7 +83,6 @@
 
 (ert-deftest org-jxl-mode-enable-disable ()
   "Enabling and disabling the mode should add/remove overlays."
-  (skip-unless (executable-find org-jxl-djxl-program))
   (let ((buf (org-jxl-test--with-org-buffer
               (format "#+BEGIN_JXL\n%s\n#+END_JXL\n"
                       org-jxl-test--valid-jxl-b64))))
@@ -114,7 +110,6 @@
 
 (ert-deftest org-jxl-output-is-valid-png ()
   "The decoded image data should be valid PNG (starts with \\x89PNG)."
-  (skip-unless (executable-find org-jxl-djxl-program))
   (let ((buf (org-jxl-test--with-org-buffer
               (format "#+BEGIN_JXL\n%s\n#+END_JXL\n"
                       org-jxl-test--valid-jxl-b64))))
@@ -135,7 +130,6 @@
 
 (ert-deftest org-jxl-refresh-removes-old-overlays ()
   "Calling refresh twice should not leak overlays."
-  (skip-unless (executable-find org-jxl-djxl-program))
   (let ((buf (org-jxl-test--with-org-buffer
               (format "#+BEGIN_JXL\n%s\n#+END_JXL\n"
                       org-jxl-test--valid-jxl-b64))))
@@ -148,7 +142,6 @@
 
 (ert-deftest org-jxl-decode-cache-reuses-png ()
   "Refreshing unchanged blocks should not grow the decode cache."
-  (skip-unless (executable-find org-jxl-djxl-program))
   (let ((buf (org-jxl-test--with-org-buffer
               (format "#+BEGIN_JXL\n%s\n#+END_JXL\n"
                       org-jxl-test--valid-jxl-b64))))
@@ -161,7 +154,6 @@
 
 (ert-deftest org-jxl-mode-disable-clears-cache ()
   "Disabling the mode should drop the decode cache."
-  (skip-unless (executable-find org-jxl-djxl-program))
   (let ((buf (org-jxl-test--with-org-buffer
               (format "#+BEGIN_JXL\n%s\n#+END_JXL\n"
                       org-jxl-test--valid-jxl-b64))))
