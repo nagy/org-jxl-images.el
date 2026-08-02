@@ -49,6 +49,7 @@
 
 (require 'org)
 (require 'org-element)
+(require 'browse-url)
 
 (defgroup org-jxl nil
   "Inline JPEG XL images in Org mode."
@@ -152,7 +153,23 @@ oldest entries are evicted past `org-jxl--decode-cache-max'."
         (push ov org-jxl--overlays)))))
 
 
+(defun org-jxl--temp-file-cleanup (tmp)
+  "Delete TMP once it has been handed to the system opener.
+Give the opener a second to grab the file, then remove it.
+The timer is one-shot and fires regardless of open success."
+  (run-with-timer 1 nil
+                  (lambda (file) (ignore-errors (delete-file file)))
+                  tmp))
+
 ;;; Block scanning
+
+(defun org-jxl--find-image-pos (&optional pos)
+  "Return the start of the JXL block containing POS, or nil.
+Returns nil outside `org-mode', so commands using this can be
+called safely from any buffer."
+  (when (and (derived-mode-p 'org-mode)
+             (eq (org-element-type (org-element-at-point pos)) 'special-block))
+    pos))
 
 (defun org-jxl-refresh-images ()
   "Scan the buffer for #+BEGIN_JXL blocks and render them as inline images."
@@ -225,20 +242,31 @@ The current top entry of the kill ring is wrapped in
 ;;;###autoload
 (defun org-jxl-open-external ()
   "Open the JXL image at point in an external viewer.
-Extracts the decoded PNG data from the overlay and opens it
-with the system's default image viewer."
+Decodes the block's stored base64 contents on demand, writes the
+resulting PNG to a temporary file, and passes it to the user's
+configured `browse-url-browser-function' (which picks a suitable
+opener per platform, e.g. `xdg-open', `open', or `start').  The
+temporary file is deleted shortly after."
   (interactive)
-  (if-let* ((ov (car (overlays-at (point))))
-            (disp (overlay-get ov 'display))
-            ((eq (car disp) 'image))
-            (data (plist-get (cdr disp) :data)))
+  (let ((pos (point)))
+    (unless (org-jxl--find-image-pos pos)
+      (user-error "No JXL image at point"))
+    (let* ((block (org-element-at-point pos))
+           (base64-str (buffer-substring-no-properties
+                        (org-element-property :contents-begin block)
+                        (org-element-property :contents-end block)))
+           (png-data (org-jxl--decode-to-png base64-str)))
+      (unless png-data
+        (user-error "Failed to decode JXL image at point"))
       (let ((tmp (make-temp-file "org-jxl-view-" nil ".png")))
-        (with-temp-buffer
-          (set-buffer-multibyte nil)
-          (insert data)
-          (write-region (point-min) (point-max) tmp nil 'silent))
-        (start-process "org-jxl-view" nil "xdg-open" tmp))
-    (user-error "No JXL image at point")))
+        (unwind-protect
+            (progn
+              (with-temp-buffer
+                (set-buffer-multibyte nil)
+                (insert png-data)
+                (write-region (point-min) (point-max) tmp nil 'silent))
+              (browse-url-of-file tmp))
+          (org-jxl--temp-file-cleanup tmp))))))
 
 (provide 'org-jxl-images)
 ;;; org-jxl-images.el ends here

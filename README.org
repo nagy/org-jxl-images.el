@@ -20,6 +20,14 @@ Paste base64 JXL data from the kill ring:
 
 : M-x org-jxl-insert-base64
 
+Open the JXL image under point in an external viewer:
+
+: M-x org-jxl-open-external
+
+The image is decoded on demand and passed to the system's default
+viewer via `browse-url-of-file' (platform-independent: xdg-open on
+Linux, open on macOS, start on Windows).
+
 Encode an image on the command line:
 
 #+begin_src sh
