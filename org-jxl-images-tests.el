@@ -237,5 +237,33 @@
     (kill-buffer buf)))
 
 
+;;; External viewer cleanup
+
+(ert-deftest org-jxl-cleanup-delay-configurable ()
+  "The cleanup timer uses `org-jxl-external-cleanup-delay', not a hardcode."
+  (let ((org-jxl-external-cleanup-delay 5)
+        (tmp (make-temp-file "org-jxl-test-view-" nil ".png"))
+        scheduled)
+    (should (> org-jxl-external-cleanup-delay 2))
+    (cl-letf (((symbol-function 'run-with-timer)
+               (lambda (secs repeat fn &rest files)
+                 (ignore repeat fn)
+                 (setq scheduled (cons secs files)))))
+      (org-jxl--temp-file-cleanup tmp))
+    (should (equal (car scheduled) org-jxl-external-cleanup-delay))
+    (should (equal (cdr scheduled) (list tmp)))
+    (should (file-exists-p tmp))
+    (delete-file tmp)))
+
+(ert-deftest org-jxl-cleanup-deletes-file ()
+  "The scheduled cleanup eventually removes the temporary file."
+  (let ((org-jxl-external-cleanup-delay 0.1)
+        (tmp (make-temp-file "org-jxl-test-view-" nil ".png")))
+    (org-jxl--temp-file-cleanup tmp)
+    (should (file-exists-p tmp))
+    (sit-for 1)
+    (should-not (file-exists-p tmp))))
+
+
 (provide 'org-jxl-images-tests)
 ;;; org-jxl-images-tests.el ends here

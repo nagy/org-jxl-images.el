@@ -67,6 +67,15 @@
   :type 'string
   :group 'org-jxl)
 
+(defcustom org-jxl-external-cleanup-delay 5
+  "Seconds before the temporary PNG of `org-jxl-open-external' is deleted.
+The delay must outlive the hand-off to the external opener: a busy
+`xdg-open' or a first-launch viewer can still be reading the file.
+Longer delays favour slow openers; shorter delays litter the temp
+directory for less time."
+  :type 'number
+  :group 'org-jxl)
+
 (defvar-local org-jxl--overlays nil
   "List of image overlays created by `org-jxl-inline-mode'.")
 
@@ -162,9 +171,11 @@ oldest entries are evicted past `org-jxl--decode-cache-max'."
 
 (defun org-jxl--temp-file-cleanup (tmp)
   "Delete TMP once it has been handed to the system opener.
-Give the opener a second to grab the file, then remove it.
-The timer is one-shot and fires regardless of open success."
-  (run-with-timer 1 nil
+Give the opener `org-jxl-external-cleanup-delay' seconds to grab
+the file, then remove it.  The timer is one-shot and fires
+regardless of open success; raise the delay if a slow opener
+still races the deletion."
+  (run-with-timer org-jxl-external-cleanup-delay nil
                   (lambda (file) (ignore-errors (delete-file file)))
                   tmp))
 
