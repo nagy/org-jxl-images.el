@@ -484,5 +484,17 @@
     (kill-buffer buf)))
 
 
+;;; Version guard
+
+(ert-deftest org-jxl-old-org-rejected-at-load ()
+  "Loading against Org older than 9.8 signals an explicit error."
+  (cl-letf (((symbol-function 'org-version) (lambda (&rest _) "9.6.1")))
+    (should-error (load (locate-library "org-jxl-images") nil nil t))))
+
+(ert-deftest org-jxl-current-org-loads-fine ()
+  "Loading against the running Org version succeeds."
+  (should (load (locate-library "org-jxl-images") nil nil t)))
+
+
 (provide 'org-jxl-images-tests)
 ;;; org-jxl-images-tests.el ends here

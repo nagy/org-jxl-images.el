@@ -19,7 +19,7 @@
 ;; Author: Daniel Nagy
 ;; Version: 0.1.0
 ;; Keywords: multimedia, org
-;; Package-Requires: ((emacs "29.1"))
+;; Package-Requires: ((emacs "29.1") (org "9.8"))
 ;; URL: https://github.com/nagy/org-jxl-images
 
 ;;; Commentary:
@@ -43,6 +43,7 @@
 ;;     M-x org-jxl-insert-base64 RET
 ;;
 ;; Requirements:
+;;     - Org 9.8 or newer (the org-link-preview machinery)
 ;;     - djxl (JPEG XL decoder, part of libjxl)
 
 ;;; Code:
@@ -50,7 +51,12 @@
 (require 'cl-lib)
 (require 'org)
 (require 'org-element)
-;; Org's link preview machinery (Org 9.8+): JXL overlays register with
+;; The preview integration rides on `org-link-preview-overlays' and
+;; friends, which exist only since Org 9.8; fail loudly on older Org
+;; instead of hitting a void-variable at the first render.
+(unless (version<= "9.8" (org-version))
+  (error "org-jxl-images requires Org 9.8 or newer (found %s)" (org-version)))
+;; Org's link preview machinery: JXL overlays register with
 ;; `org-link-preview-overlays' so Org's show/hide covers them too.
 (require 'ol)
 (require 'browse-url)
