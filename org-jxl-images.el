@@ -183,11 +183,19 @@ still races the deletion."
 
 (defun org-jxl--find-image-pos (&optional pos)
   "Return the start of the JXL block containing POS, or nil.
-Returns nil outside `org-mode', so commands using this can be
-called safely from any buffer."
-  (when (and (derived-mode-p 'org-mode)
-             (eq (org-element-type (org-element-at-point pos)) 'special-block))
-    pos))
+POS may sit anywhere inside the block, including on the base64
+contents, which org-element parses as an inner paragraph; the
+containing special block is walked up to via `org-element-lineage'.
+Returns nil outside `org-mode', outside any special block, and for
+special blocks of other types, so commands using this can be called
+safely from any buffer."
+  (when (derived-mode-p 'org-mode)
+    (let ((block (org-element-lineage (org-element-at-point pos)
+                                      '(special-block) t)))
+      (when (and block
+                 (string-equal (downcase (org-element-property :type block))
+                               "jxl"))
+        (org-element-property :begin block)))))
 
 (defun org-jxl-refresh-images ()
   "Scan the buffer for #+BEGIN_JXL blocks and render them as inline images."
@@ -266,10 +274,10 @@ configured `browse-url-browser-function' (which picks a suitable
 opener per platform, e.g. `xdg-open', `open', or `start').  The
 temporary file is deleted shortly after."
   (interactive)
-  (let ((pos (point)))
-    (unless (org-jxl--find-image-pos pos)
+  (let ((start (org-jxl--find-image-pos (point))))
+    (unless start
       (user-error "No JXL image at point"))
-    (let* ((block (org-element-at-point pos))
+    (let* ((block (org-element-at-point start))
            (base64-str (buffer-substring-no-properties
                         (org-element-property :contents-begin block)
                         (org-element-property :contents-end block)))

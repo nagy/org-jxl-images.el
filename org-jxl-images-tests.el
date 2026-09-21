@@ -265,5 +265,53 @@
     (should-not (file-exists-p tmp))))
 
 
+;;; External viewer
+
+(ert-deftest org-jxl-find-image-pos-inside-contents ()
+  "Point on the base64 resolves to the containing JXL block start."
+  (let ((buf (org-jxl-test--with-org-buffer
+              (format "#+BEGIN_JXL\n%s\n#+END_JXL\n"
+                      org-jxl-test--valid-jxl-b64))))
+    (with-current-buffer buf
+      (search-forward org-jxl-test--valid-jxl-b64)
+      (let* ((pos (match-beginning 0))
+             (start (org-jxl--find-image-pos pos)))
+        (should start)
+        (should (< start pos))))
+    (kill-buffer buf)))
+
+(ert-deftest org-jxl-open-external-from-inside-block ()
+  "`org-jxl-open-external' works with point on the base64 contents."
+  (let ((buf (org-jxl-test--with-org-buffer
+              (format "#+BEGIN_JXL\n%s\n#+END_JXL\n"
+                      org-jxl-test--valid-jxl-b64))))
+    (with-current-buffer buf
+      (search-forward org-jxl-test--valid-jxl-b64)
+      (goto-char (match-beginning 0))
+      (let (opened)
+        (cl-letf (((symbol-function 'browse-url-of-file)
+                   (lambda (file) (setq opened file))))
+          (org-jxl-open-external))
+        (should opened)
+        (should (file-exists-p opened))
+        (with-temp-buffer
+          (set-buffer-multibyte nil)
+          (insert-file-contents-literally opened)
+          (should (equal (buffer-substring-no-properties 1 5)
+                         (unibyte-string ?\x89 ?P ?N ?G))))
+        (delete-file opened)))
+    (kill-buffer buf)))
+
+(ert-deftest org-jxl-open-external-rejects-non-jxl-block ()
+  "Point inside a non-JXL special block still signals a user error."
+  (let ((buf (org-jxl-test--with-org-buffer
+              "#+BEGIN_FOO\nsome text\n#+END_FOO\n")))
+    (with-current-buffer buf
+      (search-forward "some text")
+      (goto-char (match-beginning 0))
+      (should-error (org-jxl-open-external) :type 'user-error))
+    (kill-buffer buf)))
+
+
 (provide 'org-jxl-images-tests)
 ;;; org-jxl-images-tests.el ends here
