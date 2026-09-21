@@ -212,5 +212,30 @@
       (should-not org-jxl--overlays))
     (kill-buffer buf)))
 
+;;; Decode failures
+
+(ert-deftest org-jxl-decode-failure-leaves-no-overlay ()
+  "A failing decoder leaves the block text visible, with no overlay."
+  (let ((buf (org-jxl-test--with-org-buffer
+              (format "#+BEGIN_JXL\n%s\n#+END_JXL\n"
+                      org-jxl-test--valid-jxl-b64))))
+    (with-current-buffer buf
+      (let ((org-jxl-djxl-program "false"))
+        (org-jxl-inline-mode 1))
+      (should-not org-jxl--overlays))
+    (kill-buffer buf)))
+
+(ert-deftest org-jxl-decode-empty-output-leaves-no-overlay ()
+  "Empty decoder output counts as failure, not an empty image."
+  (let ((buf (org-jxl-test--with-org-buffer
+              (format "#+BEGIN_JXL\n%s\n#+END_JXL\n"
+                      org-jxl-test--valid-jxl-b64))))
+    (with-current-buffer buf
+      (let ((org-jxl-djxl-program "true"))
+        (org-jxl-inline-mode 1))
+      (should-not org-jxl--overlays))
+    (kill-buffer buf)))
+
+
 (provide 'org-jxl-images-tests)
 ;;; org-jxl-images-tests.el ends here

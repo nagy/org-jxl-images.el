@@ -113,16 +113,20 @@ oldest evicted first.")
                 (write-region (point-min) (point-max) jxl-file nil 'silent))
               ;; Feed to djxl, capture PNG on stdout in a fresh buffer so
               ;; `call-process' appends to empty contents.
-              (let ((png-data
-                     (with-temp-buffer
-                       (set-buffer-multibyte nil)
-                       (let ((coding-system-for-write 'binary)
-                             (coding-system-for-read 'binary))
-                         (call-process org-jxl-djxl-program nil
-                                       (list (current-buffer) nil) nil
-                                       jxl-file "-" "--output_format" "png")
-                         (buffer-string)))))
-                png-data))
+              (let (png-data exit-code)
+                (with-temp-buffer
+                  (set-buffer-multibyte nil)
+                  (let ((coding-system-for-write 'binary)
+                        (coding-system-for-read 'binary))
+                    (setq exit-code
+                          (call-process org-jxl-djxl-program nil
+                                        (list (current-buffer) nil) nil
+                                        jxl-file "-" "--output_format" "png"))
+                    (setq png-data (buffer-string))))
+                ;; A failed run yields empty output; an empty string is
+                ;; truthy and would blank the block behind an empty image.
+                (when (and (eq exit-code 0) (> (length png-data) 0))
+                  png-data)))
           (error (message "Failed to render JXL block image: %s"
                           (error-message-string err))
                  nil))
