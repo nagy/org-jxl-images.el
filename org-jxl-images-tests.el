@@ -313,5 +313,63 @@
     (kill-buffer buf)))
 
 
+;;; Overlay scoping
+
+(ert-deftest org-jxl-overlay-excludes-markers ()
+  "The overlay covers only the contents; markers stay visible."
+  (let ((buf (org-jxl-test--with-org-buffer
+              (format "#+BEGIN_JXL\n%s\n#+END_JXL\n"
+                      org-jxl-test--valid-jxl-b64))))
+    (with-current-buffer buf
+      (org-jxl-inline-mode 1)
+      (should (= 1 (length org-jxl--overlays)))
+      (let* ((ov (car org-jxl--overlays))
+             (contents-begin (save-excursion
+                               (goto-char (point-min))
+                               (forward-line 1)
+                               (line-beginning-position)))
+             (contents-end (save-excursion
+                             (goto-char (point-max))
+                             (forward-line -1)
+                             (line-beginning-position))))
+        (should (= (overlay-start ov) contents-begin))
+        (should (= (overlay-end ov) contents-end))))
+    (kill-buffer buf)))
+
+(ert-deftest org-jxl-edit-rescopes-overlay ()
+  "An edit inside the block re-scopes the overlay to the new contents."
+  (let ((buf (org-jxl-test--with-org-buffer
+              (format "#+BEGIN_JXL\n%s\n#+END_JXL\n"
+                      org-jxl-test--valid-jxl-b64))))
+    (with-current-buffer buf
+      (org-jxl-inline-mode 1)
+      (let ((old (car org-jxl--overlays)))
+        (goto-char (overlay-start old))
+        (insert "\n")           ; whitespace: decode unaffected
+        (let* ((ov (car org-jxl--overlays))
+               (el (org-element-at-point (point-min))))
+          (should (= 1 (length org-jxl--overlays)))
+          (should-not (eq ov old))
+          (should (= (overlay-start ov)
+                     (org-element-property :contents-begin el)))
+          (should (= (overlay-end ov)
+                     (org-element-property :contents-end el))))))
+    (kill-buffer buf)))
+
+(ert-deftest org-jxl-marker-deletion-clears-overlay ()
+  "Deleting the markers drops the orphaned overlay."
+  (let ((buf (org-jxl-test--with-org-buffer
+              (format "#+BEGIN_JXL\n%s\n#+END_JXL\n"
+                      org-jxl-test--valid-jxl-b64))))
+    (with-current-buffer buf
+      (org-jxl-inline-mode 1)
+      (should (= 1 (length org-jxl--overlays)))
+      (delete-region (point-min)                    ; kill #+BEGIN_JXL line
+                     (save-excursion (goto-char (point-min))
+                                     (forward-line 1) (point)))
+      (should-not org-jxl--overlays))
+    (kill-buffer buf)))
+
+
 (provide 'org-jxl-images-tests)
 ;;; org-jxl-images-tests.el ends here

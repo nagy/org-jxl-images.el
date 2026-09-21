@@ -205,12 +205,32 @@ safely from any buffer."
     (org-element-map (org-element-parse-buffer) 'special-block
       (lambda (block)
         (when (string-equal (downcase (org-element-property :type block)) "jxl")
-          (org-jxl--decode-and-render
-           (org-element-property :begin block)
-           (org-element-property :end block)
-           (buffer-substring-no-properties
-            (org-element-property :contents-begin block)
-            (org-element-property :contents-end block))))))))
+          (let ((contents-begin (org-element-property :contents-begin block))
+                (contents-end (org-element-property :contents-end block)))
+            ;; Overlay only the contents: the #+BEGIN_JXL/#+END_JXL
+            ;; markers stay visible and editable around the image.
+            (when contents-begin
+              (org-jxl--decode-and-render
+               contents-begin contents-end
+               (buffer-substring-no-properties
+                contents-begin contents-end)))))))))
+
+(defvar org-jxl-inline-mode)
+
+(defun org-jxl--after-change (beg end _len)
+  "Re-render JXL overlays when the text around BEG..END changed.
+Refreshes when the change sits inside a JXL block, or when it
+overlaps a live overlay — the latter catches marker deletions,
+which leave an overlay behind but no block to re-detect."
+  (when (and org-jxl-inline-mode
+             (or (org-jxl--find-image-pos beg)
+                 (org-jxl--find-image-pos end)
+                 (cl-some (lambda (ov)
+                            (and (overlay-buffer ov)
+                                 (<= (overlay-start ov) end)
+                                 (>= (overlay-end ov) beg)))
+                          org-jxl--overlays)))
+    (org-jxl-refresh-images)))
 
 
 ;;; Minor mode
@@ -238,9 +258,11 @@ To insert a JXL block, encode your image to base64 externally
       (progn
         (org-jxl-refresh-images)
         (add-hook 'change-major-mode-hook #'org-jxl--change-major-mode nil t)
+        (add-hook 'after-change-functions #'org-jxl--after-change nil t)
         (advice-add 'org-toggle-inline-images :after #'org-jxl-refresh-images))
     (org-jxl--delete-overlays)
     (setq org-jxl--decode-cache nil)
+    (remove-hook 'after-change-functions #'org-jxl--after-change t)
     (advice-remove 'org-toggle-inline-images #'org-jxl-refresh-images)
     (remove-hook 'change-major-mode-hook #'org-jxl--change-major-mode t)))
 
