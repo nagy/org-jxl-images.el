@@ -105,41 +105,41 @@ oldest evicted first.")
   (setq org-jxl--overlays nil))
 
 (defun org-jxl--run-djxl (base64-str)
-  "Decode BASE64-STR with djxl and return PNG data, or nil on error."
-  (let ((jxl-file (make-temp-file "org-jxl-" nil ".jxl")))
-    (unwind-protect
-        (condition-case err
-            ;; Decode base64 and write binary JXL to a temp file.
+  "Decode BASE64-STR with djxl and return PNG data, or nil on error.
+Feeds the decoded JXL stream to djxl on stdin and captures its PNG
+stdout, so no temporary files touch disk."
+  (condition-case err
+      (let ((png-buffer (generate-new-buffer " *org-jxl-png*")))
+        (unwind-protect
             (with-temp-buffer
               (set-buffer-multibyte nil)
-              (let ((coding-system-for-write 'binary)
-                    (coding-system-for-read 'binary))
+              (with-current-buffer png-buffer
+                (set-buffer-multibyte nil))
+              (let ((coding-system-for-read 'binary)
+                    (coding-system-for-write 'binary))
+                ;; Decode base64 in place; the buffer now holds raw JXL.
                 (insert base64-str)
                 (goto-char (point-min))
                 (while (re-search-forward "[ \t\n\r]+" nil t)
                   (replace-match ""))
                 (base64-decode-region (point-min) (point-max))
-                (write-region (point-min) (point-max) jxl-file nil 'silent))
-              ;; Feed to djxl, capture PNG on stdout in a fresh buffer so
-              ;; `call-process' appends to empty contents.
-              (let (png-data exit-code)
-                (with-temp-buffer
-                  (set-buffer-multibyte nil)
-                  (let ((coding-system-for-write 'binary)
-                        (coding-system-for-read 'binary))
-                    (setq exit-code
-                          (call-process org-jxl-djxl-program nil
-                                        (list (current-buffer) nil) nil
-                                        jxl-file "-" "--output_format" "png"))
-                    (setq png-data (buffer-string))))
-                ;; A failed run yields empty output; an empty string is
-                ;; truthy and would blank the block behind an empty image.
-                (when (and (eq exit-code 0) (> (length png-data) 0))
-                  png-data)))
-          (error (message "Failed to render JXL block image: %s"
-                          (error-message-string err))
-                 nil))
-      (ignore-errors (delete-file jxl-file)))))
+                ;; "-" on stdin, "-" on stdout; the PNG lands in
+                ;; png-buffer instead of the source buffer.
+                (let* ((exit-code
+                        (call-process-region (point-min) (point-max)
+                                             org-jxl-djxl-program
+                                             nil (list png-buffer nil) nil
+                                             "-" "-" "--output_format" "png"))
+                       (png-data (with-current-buffer png-buffer
+                                   (buffer-string))))
+                  ;; A failed run yields empty output; an empty string is
+                  ;; truthy and would blank the block behind an empty image.
+                  (when (and (eq exit-code 0) (> (length png-data) 0))
+                    png-data))))
+          (kill-buffer png-buffer)))
+    (error (message "Failed to render JXL block image: %s"
+                    (error-message-string err))
+           nil)))
 
 
 
