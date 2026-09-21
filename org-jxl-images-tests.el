@@ -26,6 +26,11 @@
 (require 'org-jxl-images)
 (require 'ert)
 
+;; Org's preview hide path calls `image-flush', which signals "Window
+;; system frame should be used" in batch mode.  The tests never display
+;; images, so stub it out.
+(advice-add 'image-flush :override #'ignore)
+
 ;;; Helpers
 
 (defun org-jxl-test--with-org-buffer (content)
@@ -368,6 +373,114 @@
                      (save-excursion (goto-char (point-min))
                                      (forward-line 1) (point)))
       (should-not org-jxl--overlays))
+    (kill-buffer buf)))
+;;; Org link preview integration
+
+(ert-deftest org-jxl-overlay-registered-with-link-preview ()
+  "JXL overlays join `org-link-preview-overlays' and mark `org-image-overlay'."
+  (let ((buf (org-jxl-test--with-org-buffer
+              (format "#+BEGIN_JXL\n%s\n#+END_JXL\n"
+                      org-jxl-test--valid-jxl-b64))))
+    (with-current-buffer buf
+      (org-jxl-inline-mode 1)
+      (let ((ov (car org-jxl--overlays)))
+        (should (memq ov org-link-preview-overlays))
+        (should (overlay-get ov 'org-image-overlay))))
+    (kill-buffer buf)))
+
+(ert-deftest org-jxl-toggle-hides-and-shows-in-lockstep ()
+  "One toggle hides JXL blocks and link previews; the next shows both."
+  (let ((png-file (make-temp-file "org-jxl-test-link-" nil ".png"))
+        (buf (org-jxl-test--with-org-buffer
+              (format "#+BEGIN_JXL\n%s\n#+END_JXL\n"
+                      org-jxl-test--valid-jxl-b64))))
+    (unwind-protect
+        (progn
+          ;; An ordinary image link next to the JXL block.
+          (with-temp-buffer
+            (set-buffer-multibyte nil)
+            (insert (org-jxl--decode-to-png org-jxl-test--valid-jxl-b64))
+            (write-region (point-min) (point-max) png-file nil 'silent))
+          (with-current-buffer buf
+            (goto-char (point-max))
+            (insert (format "[[file:%s]]\n" png-file))
+            (org-jxl-inline-mode 1)
+            (should (= 1 (length (org-link-preview--get-overlays))))
+            ;; Org only previews image links on graphic displays; fake
+            ;; one so its own preview runs under batch mode.
+            (cl-letf (((symbol-function 'display-graphic-p)
+                       (lambda (&rest _) t)))
+              ;; Hide, then show: the link preview joins the JXL block.
+              (org-toggle-inline-images)
+              (should-not (org-link-preview--get-overlays))
+              (should-not (cl-some #'overlay-buffer org-jxl--overlays))
+              (org-toggle-inline-images)
+              (should (= 2 (length (org-link-preview--get-overlays))))
+              (should (= 1 (cl-count-if #'overlay-buffer org-jxl--overlays)))
+              ;; A single toggle now hides both.
+              (org-toggle-inline-images)
+              (should-not (org-link-preview--get-overlays))
+              (should-not (cl-some #'overlay-buffer org-jxl--overlays))
+              (org-toggle-inline-images)
+              (should (= 2 (length (org-link-preview--get-overlays))))
+              (should (= 1 (cl-count-if #'overlay-buffer org-jxl--overlays))))))
+      (delete-file png-file)
+      (kill-buffer buf))))
+
+(ert-deftest org-jxl-toggle-cycle-does-not-re-decode ()
+  "Hiding and re-showing never runs the decoder again."
+  (let ((buf (org-jxl-test--with-org-buffer
+              (format "#+BEGIN_JXL\n%s\n#+END_JXL\n"
+                      org-jxl-test--valid-jxl-b64))))
+    (with-current-buffer buf
+      (org-jxl-inline-mode 1)
+      (let ((cache-size (length org-jxl--decode-cache))
+            (decodes 0))
+        (cl-letf (((symbol-function 'org-jxl--run-djxl)
+                   (lambda (_) (cl-incf decodes) nil)))
+          (org-toggle-inline-images)
+          (org-toggle-inline-images))
+        (should (= 0 decodes))
+        (should (= cache-size (length org-jxl--decode-cache))))
+      ;; Re-shown image is a live overlay again.
+      (should (= 1 (cl-count-if #'overlay-buffer org-jxl--overlays))))
+    (kill-buffer buf)))
+
+(ert-deftest org-jxl-mode-off-buffer-stays-untouched ()
+  "The preview advice ignores buffers without `org-jxl-inline-mode'."
+  (let ((buf (org-jxl-test--with-org-buffer
+              (format "#+BEGIN_JXL\n%s\n#+END_JXL\n"
+                      org-jxl-test--valid-jxl-b64))))
+    (with-current-buffer buf
+      (org-link-preview-region)
+      (should-not org-jxl--overlays))
+    (kill-buffer buf)))
+
+(ert-deftest org-jxl-advice-survives-mode-disable ()
+  "Disabling the mode in one buffer leaves the preview advice installed."
+  (let ((buf (org-jxl-test--with-org-buffer
+              (format "#+BEGIN_JXL\n%s\n#+END_JXL\n"
+                      org-jxl-test--valid-jxl-b64))))
+    (with-current-buffer buf
+      (org-jxl-inline-mode 1)
+      (org-jxl-inline-mode -1))
+    (should (advice-member-p #'org-jxl--after-link-preview
+                             'org-link-preview-region))
+    (kill-buffer buf)))
+
+(ert-deftest org-jxl-hiding-unregisters-overlays ()
+  "Hiding drops JXL overlays from `org-link-preview-overlays'."
+  (let ((buf (org-jxl-test--with-org-buffer
+              (format "#+BEGIN_JXL\n%s\n#+END_JXL\n"
+                      org-jxl-test--valid-jxl-b64))))
+    (with-current-buffer buf
+      (org-jxl-inline-mode 1)
+      (should (= 1 (length org-link-preview-overlays)))
+      (org-toggle-inline-images)
+      (should-not org-link-preview-overlays)
+      ;; Disabling afterwards must not resurrect anything.
+      (org-jxl-inline-mode -1)
+      (should-not org-link-preview-overlays))
     (kill-buffer buf)))
 
 

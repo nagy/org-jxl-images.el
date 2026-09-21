@@ -50,6 +50,9 @@
 (require 'cl-lib)
 (require 'org)
 (require 'org-element)
+;; Org's link preview machinery (Org 9.8+): JXL overlays register with
+;; `org-link-preview-overlays' so Org's show/hide covers them too.
+(require 'ol)
 (require 'browse-url)
 
 (defgroup org-jxl nil
@@ -98,10 +101,14 @@ oldest evicted first.")
 ;;; Overlay management
 
 (defun org-jxl--delete-overlays ()
-  "Remove all JXL image overlays in the current buffer."
+  "Remove all JXL image overlays in the current buffer.
+Also unregisters them from `org-link-preview-overlays', keeping
+Org's preview bookkeeping free of dead overlays."
   (setq org-jxl--overlays
         (cl-remove-if-not #'overlay-buffer org-jxl--overlays))
-  (mapc #'delete-overlay org-jxl--overlays)
+  (dolist (ov org-jxl--overlays)
+    (setq org-link-preview-overlays (delq ov org-link-preview-overlays))
+    (delete-overlay ov))
   (setq org-jxl--overlays nil))
 
 (defun org-jxl--run-djxl (base64-str)
@@ -160,12 +167,22 @@ oldest entries are evicted past `org-jxl--decode-cache-max'."
         png-data)))
 
 (defun org-jxl--decode-and-render (start end base64-str)
-  "Decode BASE64-STR with djxl and place an image overlay from START to END."
+  "Decode BASE64-STR with djxl and place an image overlay from START to END.
+The overlay joins `org-link-preview-overlays' and carries the
+`org-image-overlay' property, so Org's own preview machinery
+(`org-link-preview-clear', `org-toggle-inline-images') hides and
+shows JXL blocks together with ordinary inline images."
   (let ((png-data (org-jxl--decode-to-png base64-str)))
     (when png-data
       (let ((ov (make-overlay start end)))
         (overlay-put ov 'display (create-image png-data 'png t :ascent 'center))
         (overlay-put ov 'evaporate t)
+        ;; Register with Org's link preview machinery, as
+        ;; `org-link-preview-region' does for its own overlays.
+        (overlay-put ov 'org-image-overlay t)
+        (overlay-put ov 'modification-hooks
+                     (list 'org-link-preview--remove-overlay))
+        (push ov org-link-preview-overlays)
         (push ov org-jxl--overlays)))))
 
 
@@ -197,23 +214,34 @@ safely from any buffer."
                                "jxl"))
         (org-element-property :begin block)))))
 
+(defun org-jxl--block-marker-present-p ()
+  "Return non-nil if the buffer may contain a JXL block.
+Cheap regexp pre-scan so `org-jxl-refresh-images' can skip the
+expensive `org-element-parse-buffer' on buffers without JXL
+blocks — the refresh advice runs on every link preview pass."
+  (save-excursion
+    (goto-char (point-min))
+    (let ((case-fold-search t))
+      (re-search-forward "^[ \t]*#\\+begin_jxl\\b" nil t))))
+
 (defun org-jxl-refresh-images ()
   "Scan the buffer for #+BEGIN_JXL blocks and render them as inline images."
   (interactive)
   (when (derived-mode-p 'org-mode)
     (org-jxl--delete-overlays)
-    (org-element-map (org-element-parse-buffer) 'special-block
-      (lambda (block)
-        (when (string-equal (downcase (org-element-property :type block)) "jxl")
-          (let ((contents-begin (org-element-property :contents-begin block))
-                (contents-end (org-element-property :contents-end block)))
-            ;; Overlay only the contents: the #+BEGIN_JXL/#+END_JXL
-            ;; markers stay visible and editable around the image.
-            (when contents-begin
-              (org-jxl--decode-and-render
-               contents-begin contents-end
-               (buffer-substring-no-properties
-                contents-begin contents-end)))))))))
+    (when (org-jxl--block-marker-present-p)
+      (org-element-map (org-element-parse-buffer) 'special-block
+                       (lambda (block)
+                         (when (string-equal (downcase (org-element-property :type block)) "jxl")
+                           (let ((contents-begin (org-element-property :contents-begin block))
+                                 (contents-end (org-element-property :contents-end block)))
+                             ;; Overlay only the contents: the #+BEGIN_JXL/#+END_JXL
+                             ;; markers stay visible and editable around the image.
+                             (when contents-begin
+                               (org-jxl--decode-and-render
+                                contents-begin contents-end
+                                (buffer-substring-no-properties
+                                 contents-begin contents-end))))))))))
 
 (defvar org-jxl-inline-mode)
 
@@ -233,6 +261,26 @@ which leave an overlay behind but no block to re-detect."
     (org-jxl-refresh-images)))
 
 
+;;; Org link preview integration
+
+(defun org-jxl--after-link-preview (&rest _)
+  "Render JXL blocks after `org-link-preview-region' has run.
+This is the show path for both `org-link-preview' and the compat
+`org-toggle-inline-images', which delegates to it.  Guarded on the
+buffer-local mode, so buffers without `org-jxl-inline-mode' are
+left untouched.  The hide path needs no advice: JXL overlays are
+registered in `org-link-preview-overlays', so
+`org-link-preview-clear' deletes them like ordinary previews
+without re-decoding."
+  (when org-jxl-inline-mode
+    (org-jxl-refresh-images)))
+
+;; Installed once at load time, not per mode toggle: per-mode
+;; installation meant any buffer disabling the mode removed the advice
+;; for every other buffer, and left toggling broken with the mode off.
+(advice-add 'org-link-preview-region :after #'org-jxl--after-link-preview)
+
+
 ;;; Minor mode
 
 ;;;###autoload
@@ -246,8 +294,9 @@ When enabled, scans the Org buffer for blocks of the form:
     #+END_JXL
 
 and replaces each block with the rendered JPEG XL image using an
-overlay.  Toggling inline images with \\[org-toggle-inline-images]
-will also hide/show JXL blocks.
+overlay.  JXL blocks take part in Org's link preview machinery:
+\\[org-link-preview] and the compat \\[org-toggle-inline-images]
+hide and show them together with ordinary inline images.
 
 To insert a JXL block, encode your image to base64 externally
 (e.g. `cjxl image.png - | base64 -w0 | wl-copy') and run
@@ -258,12 +307,10 @@ To insert a JXL block, encode your image to base64 externally
       (progn
         (org-jxl-refresh-images)
         (add-hook 'change-major-mode-hook #'org-jxl--change-major-mode nil t)
-        (add-hook 'after-change-functions #'org-jxl--after-change nil t)
-        (advice-add 'org-toggle-inline-images :after #'org-jxl-refresh-images))
+        (add-hook 'after-change-functions #'org-jxl--after-change nil t))
     (org-jxl--delete-overlays)
     (setq org-jxl--decode-cache nil)
     (remove-hook 'after-change-functions #'org-jxl--after-change t)
-    (advice-remove 'org-toggle-inline-images #'org-jxl-refresh-images)
     (remove-hook 'change-major-mode-hook #'org-jxl--change-major-mode t)))
 
 
