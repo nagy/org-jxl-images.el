@@ -76,8 +76,10 @@ Reused across refreshes so unchanged blocks are not decoded again with
 `org-jxl-djxl-program'.  Capped at `org-jxl--decode-cache-max' entries,
 oldest evicted first.")
 
-(defvar org-jxl--decode-cache-max 64
-  "Maximum number of entries kept in `org-jxl--decode-cache'.")
+(defcustom org-jxl--decode-cache-max 64
+  "Maximum number of entries kept in `org-jxl--decode-cache'."
+  :type 'integer
+  :group 'org-jxl)
 
 (defun org-jxl--change-major-mode ()
   "Disable JXL inline mode when leaving the current major mode."
