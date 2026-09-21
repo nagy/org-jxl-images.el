@@ -200,12 +200,14 @@ still races the deletion."
 
 (defun org-jxl--find-image-pos (&optional pos)
   "Return the start of the JXL block containing POS, or nil.
-POS may sit anywhere inside the block, including on the base64
-contents, which org-element parses as an inner paragraph; the
-containing special block is walked up to via `org-element-lineage'.
-Returns nil outside `org-mode', outside any special block, and for
-special blocks of other types, so commands using this can be called
-safely from any buffer."
+POS defaults to point and may sit anywhere inside the block,
+including on the base64 contents, which org-element parses as an
+inner paragraph; the containing special block is walked up to via
+`org-element-lineage'.  The returned position is the start of the
+block's #+BEGIN_JXL marker line: the image overlay covers only the
+contents between the markers.  Returns nil outside `org-mode',
+outside any special block, and for special blocks of other types,
+so commands using this can be called safely from any buffer."
   (when (derived-mode-p 'org-mode)
     (let ((block (org-element-lineage (org-element-at-point pos)
                                       '(special-block) t)))
@@ -293,8 +295,9 @@ When enabled, scans the Org buffer for blocks of the form:
     ... base64 data ...
     #+END_JXL
 
-and replaces each block with the rendered JPEG XL image using an
-overlay.  JXL blocks take part in Org's link preview machinery:
+and overlays each block's contents with the rendered JPEG XL
+image, keeping the #+BEGIN_JXL/#+END_JXL markers visible and
+editable.  JXL blocks take part in Org's link preview machinery:
 \\[org-link-preview] and the compat \\[org-toggle-inline-images]
 hide and show them together with ordinary inline images.
 
