@@ -11,11 +11,14 @@ from libjxl.
 Nix flake (flake-parts + melpaBuild), no default.nix:
 
 - `nix build` — build the package
-- `nix flake check` — byte-compile with warnings-as-errors + run ERT tests
+- `nix flake check` — byte-compile with warnings-as-errors + run ERT
+  tests, plus a lint check (package-lint + checkdoc)
 - `nix fmt` — format flake via treefmt (nixfmt)
 
 ## Conventions
 
 - New `*.el` files must be `git add`ed before `nix build` sees them.
-- Version format: `<version>-unstable-<YYYY-MM-DD of last commit>` until tagged.
+- Version format: `<version>-unstable-<YYYY-MM-DD of last commit>` until
+  tagged. The date derives from `self.sourceInfo.lastModifiedDate` —
+  never hand-bump it.
 - Keep flake.nix comments explaining non-obvious Nix lines.

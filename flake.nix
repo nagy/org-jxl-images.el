@@ -18,6 +18,14 @@
       treefmt-nix,
       ...
     }:
+    # Date of the last commit as YYYY-MM-DD, folded into the version
+    # string below.  Flake source info gives it as e.g. "20260921T231157Z".
+    let
+      lastModifiedDate = inputs.self.sourceInfo.lastModifiedDate;
+      commitDate = "${builtins.substring 0 4 lastModifiedDate}-${
+        builtins.substring 4 2 lastModifiedDate
+      }-${builtins.substring 6 2 lastModifiedDate}";
+    in
     flake-parts.lib.mkFlake { inherit inputs; } {
       # Emacs packages are pure Elisp: no ELF binaries, so evaluate on
       # every Linux arch (and darwin if the deps exist there).
@@ -47,8 +55,9 @@
             pname = "org-jxl-images";
             # Nix rejects versions Nixpkgs cannot parse. Convention for
             # unreleased packages: <upstream-version>-unstable-<YYYY-MM-DD>,
-            # where the date is the last commit touching the source.
-            version = "0.1.0-unstable-2026-08-02";
+            # where the date is the last commit touching the source. Derived
+            # from the flake's source info, so it never goes stale.
+            version = "0.1.0-unstable-${commitDate}";
 
             src = lib.cleanSource ./.;
 
@@ -105,6 +114,44 @@
           packages.default = config.packages.org-jxl-images;
 
           checks.default = config.packages.org-jxl-images;
+
+          # Lint gate on top of the compiler warnings: package-lint for
+          # package/MELPA conventions, checkdoc for docstring style.
+          checks.lint =
+            pkgs.runCommand "org-jxl-images-lint"
+              {
+                nativeBuildInputs = [
+                  (pkgs.emacsPackages.emacsWithPackages (p: [ p.package-lint ]))
+                ];
+                src = config.packages.org-jxl-images.src;
+              }
+              ''
+                export HOME="$TMPDIR"
+                cp "$src"/org-jxl-images.el .
+                # package-lint assumes online ELPA, so this offline build
+                # stubs two things: the package's real symbol prefix (file
+                # names can be longer than the symbol namespace), and a
+                # dependency that normally resolves from an ELPA archive.
+                # The stub rides package-initialize, which rebuilds its
+                # package state on every call.
+                emacs --batch -l package-lint \
+                  --eval '(progn
+                  (setq package-lint--sane-prefixes (concat package-lint--sane-prefixes "\\|org-jxl"))
+                  (advice-add (quote package-initialize) :after
+                    (lambda (&rest _)
+                      (push (cons (quote org) (list (package-desc-create :name (quote org) :version (quote (9 8 7)) :reqs nil :kind (quote single) :archive "stub" :summary "stub"))) package-alist))))' \
+                  -f package-lint-batch-and-exit \
+                  org-jxl-images.el
+                # checkdoc exits 0 even on findings, so gate on its output.
+                lint_log=$(emacs --batch -l checkdoc \
+                  --eval '(checkdoc-file "org-jxl-images.el")' 2>&1)
+                if [ -n "$lint_log" ]; then
+                  printf '%s\n' "$lint_log"
+                  echo "checkdoc reported problems" >&2
+                  exit 1
+                fi
+                touch "$out"
+              '';
 
           formatter = treefmt.config.build.wrapper;
 

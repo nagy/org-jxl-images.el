@@ -55,7 +55,7 @@
 ;; friends, which exist only since Org 9.8; fail loudly on older Org
 ;; instead of hitting a void-variable at the first render.
 (unless (version<= "9.8" (org-version))
-  (error "org-jxl-images requires Org 9.8 or newer (found %s)" (org-version)))
+  (error "Org 9.8 or newer required (found %s)" (org-version)))
 ;; Org's link preview machinery: JXL overlays register with
 ;; `org-link-preview-overlays' so Org's show/hide covers them too.
 (require 'ol)
@@ -177,9 +177,9 @@ oldest entries are evicted past `org-jxl-decode-cache-max'."
 (defun org-jxl--decode-and-render (start end base64-str)
   "Decode BASE64-STR with djxl and place an image overlay from START to END.
 The overlay joins `org-link-preview-overlays' and carries the
-`org-image-overlay' property, so Org's own preview machinery
-(`org-link-preview-clear', `org-toggle-inline-images') hides and
-shows JXL blocks together with ordinary inline images."
+`org-image-overlay' property, so Org's own preview machinery hides
+and shows JXL blocks together with ordinary inline images — see
+`org-link-preview-clear' and `org-toggle-inline-images'."
   (let ((png-data (org-jxl--decode-to-png base64-str)))
     (when png-data
       (let ((ov (make-overlay start end)))
@@ -309,8 +309,8 @@ editable.  JXL blocks take part in Org's link preview machinery:
 \\[org-link-preview] and the compat \\[org-toggle-inline-images]
 hide and show them together with ordinary inline images.
 
-To insert a JXL block, encode your image to base64 externally
-(e.g. `cjxl image.png - | base64 -w0 | wl-copy') and run
+To insert a JXL block, encode your image to base64 externally,
+e.g. `cjxl image.png - | base64 -w0 | wl-copy', and run
 `org-jxl-insert-base64' or paste it manually."
   :lighter " JXL"
   :keymap nil
