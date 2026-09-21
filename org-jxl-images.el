@@ -91,10 +91,12 @@ directory for less time."
 (defvar-local org-jxl--decode-cache nil
   "Alist mapping JXL block base64 contents to decoded PNG data.
 Reused across refreshes so unchanged blocks are not decoded again with
-`org-jxl-djxl-program'.  Capped at `org-jxl--decode-cache-max' entries,
+`org-jxl-djxl-program'.  Capped at `org-jxl-decode-cache-max' entries,
 oldest evicted first.")
 
-(defcustom org-jxl--decode-cache-max 64
+(define-obsolete-variable-alias 'org-jxl--decode-cache-max
+  'org-jxl-decode-cache-max "0.1.0")
+(defcustom org-jxl-decode-cache-max 64
   "Maximum number of entries kept in `org-jxl--decode-cache'."
   :type 'integer
   :group 'org-jxl)
@@ -159,17 +161,17 @@ stdout, so no temporary files touch disk."
 (defun org-jxl--decode-to-png (base64-str)
   "Return PNG data for BASE64-STR, decoding with djxl when not cached.
 Entries are cached in `org-jxl--decode-cache' keyed by BASE64-STR;
-oldest entries are evicted past `org-jxl--decode-cache-max'."
+oldest entries are evicted past `org-jxl-decode-cache-max'."
   (or (cdr (assoc base64-str org-jxl--decode-cache))
       (let ((png-data (org-jxl--run-djxl base64-str)))
         (when png-data
           (setq org-jxl--decode-cache
                 (cons (cons base64-str png-data) org-jxl--decode-cache))
-          (when (> (length org-jxl--decode-cache) org-jxl--decode-cache-max)
+          (when (> (length org-jxl--decode-cache) org-jxl-decode-cache-max)
             (setq org-jxl--decode-cache
                   (butlast org-jxl--decode-cache
                            (- (length org-jxl--decode-cache)
-                              org-jxl--decode-cache-max)))))
+                              org-jxl-decode-cache-max)))))
         png-data)))
 
 (defun org-jxl--decode-and-render (start end base64-str)

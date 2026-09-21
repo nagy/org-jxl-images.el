@@ -157,6 +157,26 @@
       (should (= 1 (length org-jxl--decode-cache))))
     (kill-buffer buf)))
 
+(ert-deftest org-jxl-decode-cache-max-obsolete-alias ()
+  "The old internal name resolves to the public cache option."
+  (should (eq (indirect-variable 'org-jxl--decode-cache-max)
+              (indirect-variable 'org-jxl-decode-cache-max))))
+
+(ert-deftest org-jxl-decode-cache-max-evicts-oldest ()
+  "Beyond `org-jxl-decode-cache-max' entries the oldest are evicted."
+  (let ((buf (org-jxl-test--with-org-buffer ""))
+        (org-jxl-decode-cache-max 2))
+    (with-current-buffer buf
+      (cl-letf (((symbol-function 'org-jxl--run-djxl)
+                 (lambda (s) (concat "png:" s))))
+        (org-jxl--decode-to-png "one")
+        (org-jxl--decode-to-png "two")
+        (org-jxl--decode-to-png "three"))
+      (should (= 2 (length org-jxl--decode-cache)))
+      (should-not (assoc "one" org-jxl--decode-cache))
+      (should (assoc "three" org-jxl--decode-cache)))
+    (kill-buffer buf)))
+
 (ert-deftest org-jxl-mode-disable-clears-cache ()
   "Disabling the mode should drop the decode cache."
   (let ((buf (org-jxl-test--with-org-buffer
