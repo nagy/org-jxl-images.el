@@ -1,4 +1,4 @@
-;;; org-jxl-images.el --- Inline JPEG XL images in Org mode -*- lexical-binding: t -*-
+;;; org-jxl-images.el --- Inline JXL images in Org -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2026  Daniel Nagy
 
@@ -77,7 +77,7 @@
   :group 'org-jxl)
 
 (defcustom org-jxl-external-cleanup-delay 5
-  "Seconds before the temporary PNG of `org-jxl-open-external' is deleted.
+  "Seconds to wait before deleting the PNG of `org-jxl-open-external'.
 The delay must outlive the hand-off to the external opener: a busy
 `xdg-open' or a first-launch viewer can still be reading the file.
 Longer delays favour slow openers; shorter delays litter the temp
@@ -86,7 +86,7 @@ directory for less time."
   :group 'org-jxl)
 
 (defvar-local org-jxl--overlays nil
-  "List of image overlays created by `org-jxl-inline-mode'.")
+  "List of image overlays from `org-jxl-inline-mode'.")
 
 (defvar-local org-jxl--decode-cache nil
   "Alist mapping JXL block base64 contents to decoded PNG data.
@@ -97,7 +97,7 @@ oldest evicted first.")
 (define-obsolete-variable-alias 'org-jxl--decode-cache-max
   'org-jxl-decode-cache-max "0.1.0")
 (defcustom org-jxl-decode-cache-max 64
-  "Maximum number of entries kept in `org-jxl--decode-cache'."
+  "Maximum number of entries in `org-jxl--decode-cache'."
   :type 'integer
   :group 'org-jxl)
 
@@ -195,7 +195,7 @@ and shows JXL blocks together with ordinary inline images — see
 
 
 (defun org-jxl--temp-file-cleanup (tmp)
-  "Delete TMP once it has been handed to the system opener.
+  "Delete TMP after handing it to the system opener.
 Give the opener `org-jxl-external-cleanup-delay' seconds to grab
 the file, then remove it.  The timer is one-shot and fires
 regardless of open success; raise the delay if a slow opener
@@ -296,8 +296,7 @@ without re-decoding."
 ;;;###autoload
 (define-minor-mode org-jxl-inline-mode
   "Minor mode to render base64-encoded JXL data blocks as inline images.
-
-When enabled, scans the Org buffer for blocks of the form:
+When enabled, the mode scans the Org buffer for blocks of the form:
 
     #+BEGIN_JXL
     ... base64 data ...
