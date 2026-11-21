@@ -9,15 +9,13 @@ JPEG XL images in `#+BEGIN_JXL ... #+END_JXL` Org blocks. Shells out to `djxl` a
 ## Build and test
 
 - `nix build` — build the package.
-- `nix flake check` — byte-compile with warnings as errors, run the ERT tests,
-  then the lint check (package-lint and checkdoc).
+- `nix flake check` — the gate.
 - `nix fmt` — format the flake through treefmt (nixfmt).
 
 The flake uses flake-parts plus `melpaBuild`. No `default.nix`.
 
 ## Rules
 
-- `git add` a new `*.el` file before `nix build` can see it.
 - Do not hand-bump the version. The format stays
   `<version>-unstable-<YYYY-MM-DD of last commit>` until a tag lands. The date
   derives from `self.sourceInfo.lastModifiedDate`.
