@@ -118,7 +118,7 @@
           # Lint gate on top of the compiler warnings: package-lint for
           # package/MELPA conventions, checkdoc for docstring style.
           checks.lint =
-            pkgs.runCommand "org-jxl-images-lint"
+            pkgs.runCommandLocal "org-jxl-images-lint"
               {
                 nativeBuildInputs = [
                   (pkgs.emacsPackages.emacsWithPackages (p: [ p.package-lint ]))
