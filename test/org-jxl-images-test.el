@@ -1,4 +1,4 @@
-;;; org-jxl-images-tests.el --- Tests for org-jxl-images -*- lexical-binding: t -*-
+;;; org-jxl-images-test.el --- Tests for org-jxl-images -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2026  Daniel Nagy
 
@@ -22,6 +22,8 @@
 ;;   (require 'ert)
 ;;
 ;; Then: M-x ert RET t
+
+;;; Code:
 
 (require 'org-jxl-images)
 (require 'ert)
@@ -103,7 +105,7 @@
     (kill-buffer buf)))
 
 (ert-deftest org-jxl-mode-off-by-default ()
-  "The minor mode should be off when entering org-mode."
+  "The minor mode should be off when entering `org-mode'."
   (let ((buf (org-jxl-test--with-org-buffer "* Test\n")))
     (with-current-buffer buf
       (should-not org-jxl-inline-mode)
@@ -227,7 +229,7 @@
 ;;; Mode only active in org-mode
 
 (ert-deftest org-jxl-refresh-only-in-org-mode ()
-  "`org-jxl-refresh-images' should do nothing outside org-mode."
+  "`org-jxl-refresh-images' should do nothing outside `org-mode'."
   (let ((buf (generate-new-buffer " *org-jxl-test*")))
     (with-current-buffer buf
       (fundamental-mode)
@@ -516,5 +518,5 @@
   (should (load (locate-library "org-jxl-images") nil nil t)))
 
 
-(provide 'org-jxl-images-tests)
-;;; org-jxl-images-tests.el ends here
+(provide 'org-jxl-images-test)
+;;; org-jxl-images-test.el ends here

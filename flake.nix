@@ -83,15 +83,33 @@
             checkPhase = ''
               runHook preCheck
 
+              # melpaBuild stages only the files its `files' spec matches
+              # (root *.el), so the test tree has to come back before the
+              # glob loader can see it.
+              cp -r ${./test} ./test
+
               # The tests decode real JXL data, so djxl must be reachable
               # via PATH (the package's defcustom points at the absolute
               # libjxl path after postPatch, but the tests use
               # `executable-find`).
               export PATH=${lib.getBin pkgs.libjxl}/bin:$PATH
 
-              emacs --batch -L . \
-                -l org-jxl-images-tests.el \
-                -f ert-run-tests-batch-and-exit
+              # printf repeats "-l %s" once per match, so a new test file
+              # needs no flake edit.  failglob makes an empty glob a shell
+              # error; the || guard is what fails the build, because
+              # without `set -e' the substitution alone would not abort the
+              # phase and the run would pass with zero tests.
+              shopt -s failglob
+              test_args=$(printf -- "-l %s " test/*-test.el) || {
+                echo 'no tests matched test/*-test.el' >&2
+                exit 1
+              }
+              shopt -u failglob
+
+              # Unquoted $test_args is intentional: the words must split
+              # into -l <file> pairs, which is safe because test file names
+              # never contain spaces.
+              emacs --batch -L . $test_args -f ert-run-tests-batch-and-exit
 
               runHook postCheck
             '';
@@ -128,24 +146,33 @@
               }
               ''
                 export HOME="$TMPDIR"
-                cp "$src"/org-jxl-images.el .
+                # The test tree is part of the lint surface, so copy every
+                # tracked source, not just the package file.
+                cp -r "$src"/. .
                 # package-lint assumes online ELPA, so this offline build
                 # stubs two things: the package's real symbol prefix (file
                 # names can be longer than the symbol namespace), and a
                 # dependency that normally resolves from an ELPA archive.
                 # The stub rides package-initialize, which rebuilds its
                 # package state on every call.
+                # `package-lint-main-file' is what lets test files join the
+                # glob: without it each test file is treated as a package of
+                # its own and flagged for a missing Package-Requires header.
                 emacs --batch -l package-lint \
                   --eval '(progn
+                  (setq package-lint-main-file "org-jxl-images.el")
                   (setq package-lint--sane-prefixes (concat package-lint--sane-prefixes "\\|org-jxl"))
                   (advice-add (quote package-initialize) :after
                     (lambda (&rest _)
                       (push (cons (quote org) (list (package-desc-create :name (quote org) :version (quote (9 8 7)) :reqs nil :kind (quote single) :archive "stub" :summary "stub"))) package-alist))))' \
                   -f package-lint-batch-and-exit \
-                  org-jxl-images.el
+                  *.el test/*.el
                 # checkdoc exits 0 even on findings, so gate on its output.
+                # command-line-args-left still holds the file list here:
+                # --eval runs before the trailing arguments are visited.
                 lint_log=$(emacs --batch -l checkdoc \
-                  --eval '(checkdoc-file "org-jxl-images.el")' 2>&1)
+                  --eval '(mapc (lambda (f) (checkdoc-file f)) command-line-args-left)' \
+                  *.el test/*.el 2>&1)
                 if [ -n "$lint_log" ]; then
                   printf '%s\n' "$lint_log"
                   echo "checkdoc reported problems" >&2
